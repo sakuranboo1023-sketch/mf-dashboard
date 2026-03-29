@@ -1,4 +1,4 @@
-import { TOTP } from "otpauth";
+import { TOTP, Secret } from "otpauth";
 
 type Credentials = {
   username: string;
@@ -24,15 +24,18 @@ export async function getOTP(): Promise<string> {
     throw new Error("MF_TOTP_SECRET environment variable is required for OTP generation");
   }
 
+  // Base32シークレットからSecretオブジェクトを作成
+  const secretObj = Secret.fromBase32(secret);
+
   const totp = new TOTP({
-    secret,
+    secret: secretObj,
     digits: 6,
     period: 30,
     algorithm: "SHA1",
   });
 
   const otp = totp.generate();
-  console.log("OTP generated successfully");
+  console.log(`OTP generated successfully: ${otp}`);
   return otp;
 }
 

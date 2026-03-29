@@ -10,11 +10,15 @@ export async function getAssetSummary(page: Page): Promise<AssetSummary> {
     waitUntil: "domcontentloaded",
     timeout: 30000,
   });
-  // 資産表示エリアが表示されるまで待機
-  await page
-    .locator(".heading-radius-box, .total-assets")
-    .first()
-    .waitFor({ state: "visible", timeout: 10000 });
+  // 資産表示エリアが表示されるまで待機（見つからない場合も続行）
+  try {
+    await page
+      .locator(".heading-radius-box, .total-assets, .bs-total-asset")
+      .first()
+      .waitFor({ state: "visible", timeout: 10000 });
+  } catch {
+    debug("Asset summary area not found, continuing with defaults");
+  }
 
   // Get total assets - try multiple selectors
   let totalAssets = "取得失敗";

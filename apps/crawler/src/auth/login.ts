@@ -15,9 +15,11 @@ const TIMEOUTS = {
 const SELECTORS = {
   mfidEmail: 'input[name="mfid_user[email]"]',
   mfidPassword: 'input[name="mfid_user[password]"]',
-  mfidSubmit: "#submitto",
-  mfidOtpInput: 'input[autocomplete="one-time-code"], input[name*="otp"], input[name*="code"]',
-  mfidOtpSubmit: '#submitto, button:text-is("認証する"), button:text-is("Verify")',
+  mfidSubmit: '#submitto, button:text-is("ログインする"), button[type="submit"]',
+  mfidOtpInput:
+    'input[autocomplete="one-time-code"], input[name*="otp"], input[name*="code"], input[type="tel"], input[inputmode="numeric"]',
+  mfidOtpSubmit:
+    '#submitto, button:text-is("認証する"), button:text-is("Verify"), button:text-is("確認する"), button[type="submit"]',
   mePassword: 'input[type="password"]',
   meSignIn: 'button:has-text("Sign in")',
 };
@@ -26,7 +28,9 @@ function isLoggedInUrl(url: string): boolean {
   return (
     url.includes("moneyforward.com") &&
     !url.includes("id.moneyforward.com") &&
-    !url.includes("/sign_in")
+    !url.includes("/sign_in") &&
+    url !== "https://moneyforward.com/" &&
+    !url.endsWith("moneyforward.com")
   );
 }
 
@@ -148,57 +152,114 @@ export async function login(page: Page): Promise<void> {
 
   // Click sign in button
   debug("Clicking Sign in button...");
-  await page.locator(SELECTORS.mfidSubmit).click();
+  await page.waitForTimeout(500);
+  const submitBtn = page.locator(SELECTORS.mfidSubmit).first();
+  await submitBtn.waitFor({ state: "visible", timeout: TIMEOUTS.short });
+  await submitBtn.click();
+  debug("Clicked, waiting for password page...");
 
-  // Wait for password field
-  debug("Waiting for password page...");
+  // Wait for password field (should appear on next page)
   const passwordInput = page.locator(SELECTORS.mfidPassword);
-  await passwordInput.waitFor({ state: "visible", timeout: TIMEOUTS.medium });
+  await passwordInput.waitFor({ state: "visible", timeout: TIMEOUTS.long });
+  debug("Password page loaded!");
 
   // Enter password
   debug("Entering password...");
   await passwordInput.fill(password);
+  await page.waitForTimeout(500);
   debug("Clicking Sign in button...");
-  await page.locator(SELECTORS.mfidSubmit).click();
+  const submitBtn2 = page.locator(SELECTORS.mfidSubmit).first();
+  await submitBtn2.waitFor({ state: "visible", timeout: TIMEOUTS.short });
+  await submitBtn2.click();
+  debug("Clicked, waiting for next step...");
 
-  // Check if OTP is required
+  // Wait for page to respond after password submit
+  await page.waitForTimeout(3000);
+  const afterPasswordUrl = page.url();
+  debug("URL after password submit:", afterPasswordUrl);
+  await page.screenshot({ path: "data/after-password.png" });
+  debug("Screenshot saved to data/after-password.png");
+
+  // Check if already logged in (no OTP needed)
+  if (isLoggedInUrl(afterPasswordUrl)) {
+    debug("Login completed without OTP!");
+    return;
+  }
+
+  // Check if OTP is required (wait up to 15 seconds for OTP page)
   await maybeHandleOtp(page, {
     inputSelector: SELECTORS.mfidOtpInput,
     submitSelector: SELECTORS.mfidOtpSubmit,
     label: "MFID",
+    timeout: TIMEOUTS.long,
   });
 
-  // Wait for redirect after login
-  debug("Waiting for login to complete...");
-  await page.waitForURL(/https:\/\/(id\.)?moneyforward\.com\/.*/, {
+  // Wait for OTP verification to complete - should redirect away from /two_factor_auth
+  debug("Waiting for OTP verification to complete...");
+  try {
+    await page.waitForURL((url) => !url.toString().includes("/two_factor_auth"), {
+      timeout: TIMEOUTS.login,
+    });
+  } catch {
+    debug("Timeout waiting for OTP redirect, continuing...");
+  }
+
+  let currentUrl = page.url();
+  debug("URL after OTP:", currentUrl);
+
+  // If already on ME, done
+  if (isLoggedInUrl(currentUrl)) {
+    debug("Already logged in to ME after OTP!");
+    log("Login successful!");
+    return;
+  }
+
+  // Navigate directly to Money Forward ME home
+  debug("Navigating to Money Forward ME home...");
+  await page.goto(mfUrls.home, {
+    waitUntil: "domcontentloaded",
     timeout: TIMEOUTS.login,
   });
 
-  // Navigate to Money Forward ME - will redirect to MFID for auth
-  debug("Navigating to Money Forward ME...");
-  // Don't wait for full load, just start navigation
-  await page.goto(mfUrls.signIn);
+  // Wait for possible redirects (login flow)
+  await page.waitForTimeout(3000);
+  currentUrl = page.url();
+  debug("URL after navigating to ME home:", currentUrl);
 
-  // Wait a bit for redirect to start
-  await waitForUrlChange(page);
-
-  // If we're still on the ME domain, we might be logged in or need more time
-  let currentUrl = page.url();
-  debug("URL after initial wait:", currentUrl);
-  if (currentUrl.startsWith(mfUrls.signIn)) {
-    // Wait for redirect to MFID
-    debug("Waiting for MFID redirect...");
-    await page.waitForURL(/id\.moneyforward\.com/, {
-      timeout: TIMEOUTS.long,
-    });
-    currentUrl = page.url();
+  // If we ended up on ME, we're done
+  if (isLoggedInUrl(currentUrl)) {
+    debug("Successfully navigated to ME!");
+    log("Login successful!");
+    return;
   }
 
+  // If redirected to sign_in, try the sign_in flow
+  debug("Not yet on ME, trying sign_in flow...");
+  await page.goto(mfUrls.signIn, {
+    waitUntil: "domcontentloaded",
+    timeout: TIMEOUTS.login,
+  });
+
+  // Wait for redirect
+  try {
+    await page.waitForURL(
+      (url) => {
+        const u = url.toString();
+        return (
+          isLoggedInUrl(u) || u.includes("account_selector") || u.includes("/sign_in/password")
+        );
+      },
+      { timeout: TIMEOUTS.login },
+    );
+  } catch {
+    debug("Timeout waiting for redirect, continuing...");
+  }
+  currentUrl = page.url();
   debug("Current URL:", currentUrl);
 
-  // Check if already on ME home (session is valid)
+  // Check if already on ME
   if (isLoggedInUrl(currentUrl)) {
-    debug("Already logged in to ME!");
+    debug("Logged in to ME!");
     return;
   }
 

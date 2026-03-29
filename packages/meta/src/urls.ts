@@ -2,8 +2,8 @@ const BASE_URL = "https://moneyforward.com";
 const ID_BASE_URL = "https://id.moneyforward.com";
 
 export const mfUrls = {
-  /** トップページ */
-  home: `${BASE_URL}/`,
+  /** トップページ（家計簿） */
+  home: `${BASE_URL}/cf`,
   /** 家計簿（収支詳細） */
   cashFlow: `${BASE_URL}/cf`,
   /** 資産推移 */

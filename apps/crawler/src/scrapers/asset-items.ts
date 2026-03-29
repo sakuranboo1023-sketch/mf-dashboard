@@ -10,8 +10,13 @@ export async function getAssetItems(page: Page): Promise<AssetItem[]> {
   await page.goto(mfUrls.assetHistory, {
     waitUntil: "domcontentloaded",
   });
-  // テーブルが表示されるまで待機
-  await page.locator("table.table-bordered").waitFor({ state: "visible", timeout: 10000 });
+  // テーブルが表示されるまで待機（見つからない場合は空配列を返す）
+  try {
+    await page.locator("table.table-bordered").waitFor({ state: "visible", timeout: 10000 });
+  } catch {
+    debug("Asset items table not found, returning empty");
+    return [];
+  }
 
   const items: AssetItem[] = [];
 

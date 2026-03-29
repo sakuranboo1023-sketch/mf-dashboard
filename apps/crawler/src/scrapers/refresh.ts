@@ -45,8 +45,17 @@ export async function clickRefreshButton(page: Page): Promise<RefreshResult> {
   await page.goto(mfUrls.home);
   await page.waitForLoadState("networkidle");
 
-  const refreshButton = page.locator('a:has-text("更新")').first();
-  await refreshButton.click();
+  // 更新ボタンを探す（複数のセレクターを試行）
+  const refreshButton = page
+    .locator('a:has-text("更新"), button:has-text("更新"), input[value="更新"]')
+    .first();
+  try {
+    await refreshButton.waitFor({ state: "visible", timeout: 5000 });
+    await refreshButton.click();
+  } catch {
+    warn("Refresh button not found, skipping refresh");
+    return { completed: true, incompleteAccounts: [] };
+  }
 
   info("Refreshing accounts...");
 

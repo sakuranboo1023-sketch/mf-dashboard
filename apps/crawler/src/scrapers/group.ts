@@ -157,7 +157,9 @@ export async function switchGroup(page: Page, groupId: string): Promise<Group | 
 
   const groupSelect = await getGroupSelector(page);
   if (!groupSelect) {
-    throw new Error("Group selector not found");
+    // グループセレクターが存在しない場合は、グループ機能なしとして続行
+    debug("Group selector not found, proceeding without group switching");
+    return { id: NO_GROUP_ID, name: "グループ選択なし", isCurrent: true };
   }
 
   // 現在の値と同じ場合は何もしない

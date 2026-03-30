@@ -38,13 +38,13 @@ jobs:
             echo "demo=true" >> $GITHUB_OUTPUT
           fi
       - name: Build Next.js app
-        run: pnpm build:demo
-        env:
-          DB_PATH: ${{ steps.db.outputs.path }}
-          DEMO_MODE: ${{ steps.db.outputs.demo }}
-          GITHUB_PAGES: "true"
-          NEXT_PUBLIC_GITHUB_ORG: ${{ github.repository_owner }}
-          NEXT_PUBLIC_GITHUB_REPO: ${{ github.event.repository.name }}
+        run: |
+          export DB_PATH="${{ steps.db.outputs.path }}"
+          export DEMO_MODE="${{ steps.db.outputs.demo }}"
+          export GITHUB_PAGES="true"
+          export NEXT_PUBLIC_GITHUB_ORG="${{ github.repository_owner }}"
+          export NEXT_PUBLIC_GITHUB_REPO="${{ github.event.repository.name }}"
+          pnpm --filter web build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

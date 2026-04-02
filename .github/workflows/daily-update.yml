@@ -50,10 +50,24 @@ jobs:
         with:
           mode: save
           enabled: ${{ vars.CACHE_AUTH_STATE }}
-      - run: |
+      - name: Debug DB files
+        run: |
+          echo "=== data/ ==="
+          ls -la data/moneyforward.db* 2>/dev/null || echo "not found in data/"
+          echo "=== apps/crawler/data/ ==="
+          ls -la apps/crawler/data/moneyforward.db* 2>/dev/null || echo "not found in apps/crawler/data/"
+      - name: Copy DB and push
+        run: |
+          # クローラーが apps/crawler/data/ に保存する場合があるのでコピー
+          if [ -f "apps/crawler/data/moneyforward.db" ]; then
+            cp apps/crawler/data/moneyforward.db data/moneyforward.db
+            echo "Copied from apps/crawler/data/"
+          fi
+          # タイムスタンプファイルを更新（DBが同一でもデプロイがトリガーされるように）
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > data/last-updated.txt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/moneyforward.db
+          git add data/moneyforward.db data/last-updated.txt
           git diff --cached --quiet || git commit -m "chore: update database"
           git push
       - name: Trigger deploy

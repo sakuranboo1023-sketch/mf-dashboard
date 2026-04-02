@@ -40,6 +40,8 @@ jobs:
         with:
           mode: restore
           enabled: ${{ vars.CACHE_AUTH_STATE }}
+      - name: DB hash before crawler
+        run: sha256sum data/moneyforward.db 2>/dev/null || echo "DB not found"
       - run: pnpm --filter @mf-dashboard/crawler start
         env:
           MF_USERNAME: ${{ secrets.MF_USERNAME }}
@@ -52,10 +54,16 @@ jobs:
           enabled: ${{ vars.CACHE_AUTH_STATE }}
       - name: Debug DB files
         run: |
-          echo "=== data/ ==="
+          echo "=== DB hash before/after ==="
+          echo "data/moneyforward.db:"
+          sha256sum data/moneyforward.db 2>/dev/null || echo "not found"
           ls -la data/moneyforward.db* 2>/dev/null || echo "not found in data/"
           echo "=== apps/crawler/data/ ==="
           ls -la apps/crawler/data/moneyforward.db* 2>/dev/null || echo "not found in apps/crawler/data/"
+          echo "=== last_scraped_at in DB ==="
+          sqlite3 data/moneyforward.db "SELECT id, name, last_scraped_at FROM groups;" 2>/dev/null || echo "sqlite3 not available"
+          echo "=== git status ==="
+          git status --short
       - name: Copy DB and push
         run: |
           # クローラーが apps/crawler/data/ に保存する場合があるのでコピー
